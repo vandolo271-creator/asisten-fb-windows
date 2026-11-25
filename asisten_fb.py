@@ -1,347 +1,217 @@
-import json
-import os
-import re
-import sys
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-from pathlib import Path
-from datetime import datetime, timezone
-import webbrowser
-import urllib.parse
+from tkinter import ttk, messagebox, filedialog
+import webbrowser, subprocess, os, json
+from datetime import datetime
 
-APP_NAME = "Asisten FB"
-CHECK_INTERVAL_MS = 30 * 60 * 1000
-MIN_AGE_HOURS_DEFAULT = 24
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(APP_DIR, "data")
+QUEUE_FILE = os.path.join(DATA_DIR, "posts.json")
+os.makedirs(DATA_DIR, exist_ok=True)
 
-def app_dir():
-    # Keep data beside the EXE, not in PyInstaller's temporary extraction folder.
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
+BG = "#080b0b"
+PANEL = "#111919"
+LIME = "#D9FF00"
+CYAN = "#04FFFF"
+WHITE = "#F2F5F5"
+MUTED = "#9AA7A7"
 
-ROOT = app_dir()
-DATA_DIR = ROOT / "data"
-DATA_DIR.mkdir(exist_ok=True)
-POSTS_FILE = DATA_DIR / "posts.json"
-SETTINGS_FILE = DATA_DIR / "settings.json"
-
-def load_json(path, fallback):
+def load_items():
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        with open(QUEUE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
     except Exception:
-        return fallback
+        return []
 
-def save_json(path, value):
-    path.parent.mkdir(exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
+def save_items():
+    with open(QUEUE_FILE, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False, indent=2)
 
-def parse_date(value):
-    value = (value or "").strip()
-    if not value:
-        return None
-    # Accept ISO date/time, including "2026-11-24 15:30".
-    try:
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.astimezone()
-        return dt
-    except Exception:
-        return None
-
-def age_hours(post):
-    dt = parse_date(post.get("posted_at", ""))
-    if not dt:
-        return None
-    return (datetime.now().astimezone() - dt.astimezone()).total_seconds() / 3600
-
-def valid_facebook_url(url):
-    try:
-        p = urllib.parse.urlparse(url.strip())
-        return p.scheme in ("http", "https") and (
-            p.netloc.lower().endswith("facebook.com") or
-            p.netloc.lower().endswith("fb.watch") or
-            p.netloc.lower().endswith("fb.com")
-        )
-    except Exception:
-        return False
-
-class AsistenFB:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Asisten FB — Antrean Postingan")
-        self.root.geometry("1060x700")
-        self.root.minsize(900, 580)
-        self.root.configure(bg="#080b0b")
-        self.settings = load_json(SETTINGS_FILE, {"min_age_hours": MIN_AGE_HOURS_DEFAULT})
-        self.posts = load_json(POSTS_FILE, [])
-        self.selected_id = None
-        self.next_check = None
-        self._style()
-        self._build()
-        self.refresh_table()
-        self.scan_queue(show_message=False)
-        self.schedule_next()
-
-    def _style(self):
-        style = ttk.Style()
+def open_edge(url):
+    # Use an ordinary Edge window and its existing browser profile.
+    candidates = [
+        os.path.join(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+                     "Microsoft", "Edge", "Application", "msedge.exe"),
+        os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
+                     "Microsoft", "Edge", "Application", "msedge.exe"),
+        "msedge"
+    ]
+    for exe in candidates:
         try:
-            style.theme_use("clam")
+            subprocess.Popen([exe, url], shell=False)
+            return
         except Exception:
             pass
-        style.configure("Treeview", background="#101515", foreground="#e9f2ef",
-                        fieldbackground="#101515", rowheight=30, borderwidth=0)
-        style.configure("Treeview.Heading", background="#1b2523", foreground="#d9ff00",
-                        font=("Segoe UI", 9, "bold"))
-        style.map("Treeview", background=[("selected", "#29403a")],
-                  foreground=[("selected", "#ffffff")])
-        style.configure("TCombobox", fieldbackground="#101515", background="#101515",
-                        foreground="#e9f2ef")
+    webbrowser.open(url)
 
-    def _button(self, parent, label, command, accent=False):
-        return tk.Button(parent, text=label, command=command,
-                         bg="#d9ff00" if accent else "#1a2925",
-                         fg="#08100b" if accent else "#e9f2ef",
-                         activebackground="#bde000", activeforeground="#08100b",
-                         relief="flat", bd=0, padx=13, pady=8,
-                         font=("Segoe UI", 9, "bold"), cursor="hand2")
+def login_fb():
+    open_edge("https://www.facebook.com/login/")
+    messagebox.showinfo("Login Facebook",
+        "Facebook dibuka di Microsoft Edge. Silakan login langsung di situs Facebook.\n\n"
+        "Asisten FB tidak meminta, membaca, atau menyimpan kata sandi maupun cookie Anda.")
 
-    def _build(self):
-        header = tk.Frame(self.root, bg="#080b0b")
-        header.pack(fill="x", padx=18, pady=(16, 8))
-        tk.Label(header, text="ASISTEN FB", bg="#080b0b", fg="#d9ff00",
-                 font=("Segoe UI", 20, "bold")).pack(side="left")
-        tk.Label(header, text="ANTREAN POSTINGAN • PEMERIKSAAN 30 MENIT",
-                 bg="#080b0b", fg="#9fb2aa", font=("Segoe UI", 9, "bold")).pack(side="left", padx=16, pady=(8,0))
-        self.status_label = tk.Label(header, text="Siap", bg="#080b0b", fg="#00eaff",
-                                     font=("Segoe UI", 9, "bold"))
-        self.status_label.pack(side="right", pady=8)
+def open_feed():
+    open_edge("https://www.facebook.com/")
 
-        top = tk.Frame(self.root, bg="#101515", highlightbackground="#33423d", highlightthickness=1)
-        top.pack(fill="x", padx=18, pady=8)
-        tk.Label(top, text="Tambah banyak tautan sekaligus (satu tautan per baris)",
-                 bg="#101515", fg="#e9f2ef", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=12, pady=(10,5))
-        self.urls_text = tk.Text(top, height=4, bg="#080d0c", fg="#e9f2ef", insertbackground="#d9ff00",
-                                 relief="flat", wrap="word", font=("Consolas", 9))
-        self.urls_text.pack(fill="x", padx=12, pady=(0,8))
-        actions = tk.Frame(top, bg="#101515")
-        actions.pack(fill="x", padx=12, pady=(0,10))
-        self._button(actions, "Tambah ke antrean", self.add_pasted_urls, True).pack(side="left")
-        self._button(actions, "Impor TXT", self.import_txt).pack(side="left", padx=7)
-        self._button(actions, "Ekspor antrean", self.export_txt).pack(side="left")
-        self._button(actions, "Pengaturan", self.settings_dialog).pack(side="right")
+def add_links():
+    raw = link_text.get("1.0", "end").strip()
+    if not raw:
+        messagebox.showwarning("Belum ada tautan", "Tempel satu atau beberapa tautan postingan terlebih dahulu.")
+        return
+    added = 0
+    for line in raw.splitlines():
+        url = line.strip()
+        if url.startswith("https://") and ("facebook.com" in url or "fb.watch" in url):
+            if not any(x.get("url") == url for x in items):
+                items.append({"url": url, "status": "Menunggu", "comment": ""})
+                added += 1
+    save_items()
+    refresh()
+    link_text.delete("1.0", "end")
+    messagebox.showinfo("Antrean", f"{added} tautan ditambahkan.")
 
-        mid = tk.Frame(self.root, bg="#080b0b")
-        mid.pack(fill="both", expand=True, padx=18, pady=8)
-        columns = ("number", "kind", "age", "state", "url")
-        self.tree = ttk.Treeview(mid, columns=columns, show="headings", selectmode="browse")
-        headings = {"number":"No.", "kind":"Jenis", "age":"Umur postingan", "state":"Status", "url":"Tautan"}
-        widths = {"number":48, "kind":85, "age":120, "state":180, "url":540}
-        for c in columns:
-            self.tree.heading(c, text=headings[c])
-            self.tree.column(c, width=widths[c], anchor="w")
-        self.tree.pack(side="left", fill="both", expand=True)
-        scroll = ttk.Scrollbar(mid, orient="vertical", command=self.tree.yview)
-        scroll.pack(side="right", fill="y")
-        self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
+def selected_index():
+    sel = tree.selection()
+    if not sel:
+        return None
+    return int(sel[0])
 
-        bottom = tk.Frame(self.root, bg="#101515", highlightbackground="#33423d", highlightthickness=1)
-        bottom.pack(fill="x", padx=18, pady=(0,10))
-        left = tk.Frame(bottom, bg="#101515")
-        left.pack(side="left", fill="both", expand=True, padx=12, pady=10)
-        tk.Label(left, text="DRAF KOMENTAR", bg="#101515", fg="#d9ff00",
-                 font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        self.comment_text = tk.Text(left, height=3, bg="#080d0c", fg="#e9f2ef", insertbackground="#d9ff00",
-                                    relief="flat", wrap="word", font=("Segoe UI", 9))
-        self.comment_text.pack(fill="x", pady=(5,0))
-        right = tk.Frame(bottom, bg="#101515")
-        right.pack(side="right", padx=12, pady=12)
-        self._button(right, "Buka postingan", self.open_selected, True).pack(fill="x", pady=3)
-        self._button(right, "Salin komentar", self.copy_comment).pack(fill="x", pady=3)
-        self._button(right, "Tandai selesai", self.mark_done).pack(fill="x", pady=3)
-        self._button(right, "Hapus dari antrean", self.delete_selected).pack(fill="x", pady=3)
+def refresh():
+    for row in tree.get_children():
+        tree.delete(row)
+    for i, item in enumerate(items):
+        tree.insert("", "end", iid=str(i), values=(i+1, item.get("status","Menunggu"), item.get("url","")))
 
-        footer = tk.Frame(self.root, bg="#080b0b")
-        footer.pack(fill="x", padx=18, pady=(0,12))
-        self.footer_label = tk.Label(footer, text="", bg="#080b0b", fg="#91a49c", font=("Segoe UI", 8))
-        self.footer_label.pack(side="left")
-        self._button(footer, "Periksa sekarang", self.manual_scan).pack(side="right")
+def open_selected():
+    i = selected_index()
+    if i is None:
+        messagebox.showwarning("Pilih postingan", "Pilih satu tautan dari antrean.")
+        return
+    open_edge(items[i]["url"])
 
-        note = ("Catatan: aplikasi ini tidak membaca Beranda pribadi Facebook dan tidak melakukan Like/komen otomatis. "
-                "Anda memasukkan tautan yang memang dapat Anda akses; aplikasi memeriksa umur berdasarkan tanggal yang Anda isi.")
-        tk.Label(self.root, text=note, bg="#080b0b", fg="#82948d",
-                 font=("Segoe UI", 8), wraplength=1000, justify="left").pack(fill="x", padx=18, pady=(0,12))
+def copy_comment():
+    i = selected_index()
+    if i is None:
+        messagebox.showwarning("Pilih postingan", "Pilih satu tautan dari antrean.")
+        return
+    comment = items[i].get("comment", "").strip()
+    if not comment:
+        messagebox.showinfo("Komentar", "Isi kolom komentar draf terlebih dahulu.")
+        return
+    root.clipboard_clear()
+    root.clipboard_append(comment)
+    root.update()
+    messagebox.showinfo("Disalin", "Draf komentar disalin. Anda dapat menempelkannya sendiri di Facebook.")
 
-    def persist(self):
-        save_json(POSTS_FILE, self.posts)
+def save_comment():
+    i = selected_index()
+    if i is None:
+        messagebox.showwarning("Pilih postingan", "Pilih satu tautan dari antrean.")
+        return
+    items[i]["comment"] = comment_text.get("1.0", "end").strip()
+    save_items()
+    messagebox.showinfo("Tersimpan", "Draf komentar disimpan.")
 
-    def add_pasted_urls(self):
-        raw = self.urls_text.get("1.0", "end").strip()
-        urls = [x.strip() for x in re.split(r"[\r\n\t ]+", raw) if x.strip()]
-        self.add_urls(urls)
-        self.urls_text.delete("1.0", "end")
+def mark_done():
+    i = selected_index()
+    if i is None:
+        messagebox.showwarning("Pilih postingan", "Pilih satu tautan dari antrean.")
+        return
+    items[i]["status"] = "Selesai manual"
+    save_items()
+    refresh()
 
-    def import_txt(self):
-        path = filedialog.askopenfilename(filetypes=[("Text files","*.txt"),("All files","*.*")])
-        if not path:
-            return
-        try:
-            raw = Path(path).read_text(encoding="utf-8-sig")
-        except Exception as e:
-            messagebox.showerror("Gagal membaca file", str(e))
-            return
-        urls = [x.strip() for x in re.split(r"[\r\n\t ]+", raw) if x.strip()]
-        self.add_urls(urls)
+def delete_selected():
+    i = selected_index()
+    if i is None:
+        messagebox.showwarning("Pilih postingan", "Pilih satu tautan dari antrean.")
+        return
+    if messagebox.askyesno("Hapus", "Hapus tautan terpilih dari antrean?"):
+        items.pop(i)
+        save_items()
+        refresh()
 
-    def add_urls(self, urls):
-        existing = {p["url"] for p in self.posts}
-        added, rejected = 0, 0
-        for url in urls:
-            if not valid_facebook_url(url) or url in existing:
-                rejected += 1
-                continue
-            if len(self.posts) >= 50:
-                break
-            self.posts.append({
-                "id": str(int(datetime.now().timestamp()*1000)) + str(added),
-                "url": url, "kind": "Belum dipilih", "posted_at": "",
-                "status": "Menunggu tanggal", "comment": ""
-            })
-            existing.add(url)
-            added += 1
-        self.persist()
-        self.refresh_table()
-        messagebox.showinfo("Antrean diperbarui", f"Ditambahkan: {added}\nDiabaikan/duplikat: {rejected}\nKapasitas maksimum: 50 postingan.")
+def import_txt():
+    path = filedialog.askopenfilename(filetypes=[("Text files","*.txt"),("All files","*.*")])
+    if not path:
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        link_text.insert("end", f.read())
+    add_links()
 
-    def export_txt(self):
-        path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files","*.txt")])
-        if not path:
-            return
-        Path(path).write_text("\n".join(p["url"] for p in self.posts), encoding="utf-8")
-        messagebox.showinfo("Selesai", "Daftar tautan berhasil diekspor.")
+def export_txt():
+    path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files","*.txt")])
+    if not path:
+        return
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(x.get("url","") for x in items))
+    messagebox.showinfo("Ekspor", "Daftar tautan berhasil disimpan.")
 
-    def refresh_table(self):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        min_age = float(self.settings.get("min_age_hours", 24))
-        for i, p in enumerate(self.posts, 1):
-            age = age_hours(p)
-            age_text = f"{age:.1f} jam" if age is not None else "Tanggal belum diisi"
-            state = p.get("status", "Menunggu")
-            if age is not None and age < min_age and state not in ("Selesai",):
-                state = f"Belum {min_age:g} jam"
-            self.tree.insert("", "end", iid=p["id"], values=(i, p.get("kind","-"), age_text, state, p["url"]))
-        self.footer_label.config(text=f"{len(self.posts)}/50 postingan • Batas umur: {min_age:g} jam • Pemeriksaan otomatis: 30 menit")
+items = load_items()
+root = tk.Tk()
+root.title("Asisten FB - Edge")
+root.geometry("980x720")
+root.minsize(780, 600)
+root.configure(bg=BG)
 
-    def on_select(self, _event=None):
-        selected = self.tree.selection()
-        if not selected:
-            self.selected_id = None
-            return
-        self.selected_id = selected[0]
-        post = next((p for p in self.posts if p["id"] == self.selected_id), None)
-        self.comment_text.delete("1.0", "end")
-        if post:
-            self.comment_text.insert("1.0", post.get("comment", ""))
+style = ttk.Style()
+style.theme_use("clam")
+style.configure("Treeview", background=PANEL, foreground=WHITE, fieldbackground=PANEL, rowheight=28)
+style.configure("Treeview.Heading", background="#263333", foreground=LIME, font=("Segoe UI", 9, "bold"))
+style.map("Treeview", background=[("selected", "#344000")])
 
-    def selected_post(self):
-        if not self.selected_id:
-            messagebox.showwarning("Pilih postingan", "Pilih satu postingan pada daftar terlebih dahulu.")
-            return None
-        return next((p for p in self.posts if p["id"] == self.selected_id), None)
+def heading(parent, text):
+    tk.Label(parent, text=text, bg=parent["bg"], fg=LIME, font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(8,5))
 
-    def open_selected(self):
-        p = self.selected_post()
-        if p:
-            webbrowser.open(p["url"])
+top = tk.Frame(root, bg=BG, padx=18, pady=14)
+top.pack(fill="x")
+tk.Label(top, text="ASISTEN FB", bg=BG, fg=LIME, font=("Segoe UI", 22, "bold")).pack(anchor="w")
+tk.Label(top, text="Pendamping antrean tautan Facebook • Windows 10/11", bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w")
 
-    def copy_comment(self):
-        p = self.selected_post()
-        if not p:
-            return
-        comment = self.comment_text.get("1.0", "end").strip()
-        if not comment:
-            messagebox.showinfo("Komentar kosong", "Isi draf komentar terlebih dahulu.")
-            return
-        p["comment"] = comment
-        self.persist()
-        self.root.clipboard_clear()
-        self.root.clipboard_append(comment)
-        self.root.update()
-        messagebox.showinfo("Disalin", "Komentar disalin. Anda dapat menempelkannya sendiri di Facebook.")
+login_panel = tk.Frame(root, bg=PANEL, padx=14, pady=12)
+login_panel.pack(fill="x", padx=18, pady=6)
+tk.Label(login_panel, text="AKSES FACEBOOK MELALUI MICROSOFT EDGE", bg=PANEL, fg=CYAN, font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0,8))
+btns = tk.Frame(login_panel, bg=PANEL)
+btns.pack(anchor="w")
+tk.Button(btns, text="LOGIN FACEBOOK", command=login_fb, bg=LIME, fg="#101400", relief="flat", padx=16, pady=8, font=("Segoe UI",9,"bold")).pack(side="left", padx=(0,8))
+tk.Button(btns, text="BUKA BERANDA", command=open_feed, bg="#263333", fg=WHITE, relief="flat", padx=16, pady=8).pack(side="left")
+tk.Label(login_panel, text="Login berlangsung di Edge. Jangan pernah memasukkan kata sandi atau cookie Facebook ke aplikasi ini.", bg=PANEL, fg=MUTED, font=("Segoe UI",8)).pack(anchor="w", pady=(8,0))
 
-    def mark_done(self):
-        p = self.selected_post()
-        if not p:
-            return
-        p["status"] = "Selesai (ditandai manual)"
-        p["comment"] = self.comment_text.get("1.0", "end").strip()
-        self.persist()
-        self.refresh_table()
+main = tk.Frame(root, bg=BG, padx=18)
+main.pack(fill="both", expand=True)
+heading(main, "1. TAMBAHKAN TAUTAN POSTINGAN")
+link_text = tk.Text(main, height=4, bg="#101616", fg=WHITE, insertbackground=LIME, relief="flat", font=("Consolas",9), wrap="word")
+link_text.pack(fill="x")
+actions = tk.Frame(main, bg=BG)
+actions.pack(fill="x", pady=7)
+for label, cmd in [("Tambah ke antrean", add_links), ("Impor TXT", import_txt), ("Ekspor TXT", export_txt)]:
+    tk.Button(actions, text=label, command=cmd, bg="#263333", fg=WHITE, relief="flat", padx=12, pady=6).pack(side="left", padx=(0,7))
 
-    def delete_selected(self):
-        p = self.selected_post()
-        if not p:
-            return
-        if messagebox.askyesno("Hapus", "Hapus postingan ini dari antrean?"):
-            self.posts = [x for x in self.posts if x["id"] != p["id"]]
-            self.selected_id = None
-            self.persist()
-            self.refresh_table()
-            self.comment_text.delete("1.0", "end")
+heading(main, "2. ANTREAN TAUTAN")
+tree = ttk.Treeview(main, columns=("no","status","url"), show="headings", height=9)
+tree.heading("no", text="No.")
+tree.heading("status", text="Status")
+tree.heading("url", text="Tautan postingan")
+tree.column("no", width=55, anchor="center")
+tree.column("status", width=140, anchor="center")
+tree.column("url", width=650)
+tree.pack(fill="both", expand=True)
+row_actions = tk.Frame(main, bg=BG)
+row_actions.pack(fill="x", pady=7)
+for label, cmd in [("Buka postingan", open_selected), ("Tandai selesai", mark_done), ("Hapus", delete_selected)]:
+    tk.Button(row_actions, text=label, command=cmd, bg="#263333", fg=WHITE, relief="flat", padx=12, pady=6).pack(side="left", padx=(0,7))
 
-    def settings_dialog(self):
-        win = tk.Toplevel(self.root)
-        win.title("Pengaturan")
-        win.configure(bg="#101515")
-        win.resizable(False, False)
-        tk.Label(win, text="Umur minimum postingan (jam)", bg="#101515", fg="#e9f2ef").pack(padx=18, pady=(16,5))
-        val = tk.StringVar(value=str(self.settings.get("min_age_hours",24)))
-        entry = tk.Entry(win, textvariable=val, bg="#080d0c", fg="#d9ff00", insertbackground="#d9ff00", relief="flat")
-        entry.pack(fill="x", padx=18, pady=5)
-        tk.Label(win, text="Interval pemantauan tetap 30 menit.", bg="#101515", fg="#9fb2aa").pack(padx=18, pady=5)
-        def save():
-            try:
-                n = float(val.get())
-                if n < 0 or n > 8760:
-                    raise ValueError()
-            except Exception:
-                messagebox.showerror("Nilai tidak valid", "Masukkan angka jam yang benar.")
-                return
-            self.settings["min_age_hours"] = n
-            save_json(SETTINGS_FILE, self.settings)
-            self.refresh_table()
-            win.destroy()
-        self._button(win, "Simpan", save, True).pack(pady=14)
+heading(main, "3. DRAF KOMENTAR (ANDA YANG MENEMPEL DAN MENGIRIM)")
+comment_text = tk.Text(main, height=3, bg="#101616", fg=WHITE, insertbackground=LIME, relief="flat", font=("Segoe UI",9), wrap="word")
+comment_text.pack(fill="x")
+comment_actions = tk.Frame(main, bg=BG)
+comment_actions.pack(fill="x", pady=7)
+tk.Button(comment_actions, text="Simpan draf", command=save_comment, bg="#263333", fg=WHITE, relief="flat", padx=12, pady=6).pack(side="left", padx=(0,7))
+tk.Button(comment_actions, text="Salin draf komentar", command=copy_comment, bg=LIME, fg="#101400", relief="flat", padx=12, pady=6).pack(side="left")
 
-    def scan_queue(self, show_message=True):
-        min_age = float(self.settings.get("min_age_hours", 24))
-        eligible = 0
-        for p in self.posts:
-            age = age_hours(p)
-            if age is not None and age >= min_age and p.get("status") != "Selesai (ditandai manual)":
-                p["status"] = "Siap ditinjau"
-                eligible += 1
-            elif age is not None and age < min_age and p.get("status") != "Selesai (ditandai manual)":
-                p["status"] = "Menunggu umur minimum"
-        self.persist()
-        self.refresh_table()
-        now = datetime.now().astimezone().strftime("%d-%m-%Y %H:%M:%S")
-        self.status_label.config(text=f"Terakhir diperiksa: {now}")
-        if show_message:
-            messagebox.showinfo("Pemeriksaan selesai", f"{eligible} postingan memenuhi batas umur.\nAplikasi tidak melakukan Like atau komentar otomatis.")
+note = ("Catatan: aplikasi ini tidak membaca seluruh Beranda Facebook, tidak mengambil postingan secara diam-diam, "
+        "dan tidak melakukan Like/komentar otomatis. Tautan dimasukkan oleh Anda; aplikasi membantu menyimpan antrean, "
+        "membuka postingan di Edge, dan menyalin draf komentar.")
+tk.Label(root, text=note, bg=BG, fg=MUTED, justify="left", wraplength=930, font=("Segoe UI",8), padx=18, pady=10).pack(fill="x")
 
-    def manual_scan(self):
-        self.scan_queue(show_message=True)
-
-    def schedule_next(self):
-        self.root.after(CHECK_INTERVAL_MS, self._scheduled_scan)
-
-    def _scheduled_scan(self):
-        self.scan_queue(show_message=False)
-        self.schedule_next()
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = AsistenFB(root)
-    root.mainloop()
+refresh()
+root.mainloop()
