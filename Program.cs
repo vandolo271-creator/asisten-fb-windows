@@ -172,7 +172,7 @@ public class MainForm : Form
         var modelLabel = new Label { Text = "Model:", ForeColor = Color.Gainsboro, Location = new Point(485, 12), AutoSize = true };
         toolbar.Controls.Add(modelLabel);
         modelBox.SetBounds(535, 8, 100, 27);
-        modelBox.Text = "gpt-5.5";
+        modelBox.Text = "gpt-6-luna";
         modelBox.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         toolbar.Controls.Add(modelBox);
 
@@ -326,7 +326,7 @@ public class MainForm : Form
         string? key = ReadApiKey();
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidOperationException("API Key belum disimpan. Tempel API Key lalu tekan SIMPAN KEY.");
-        string model = string.IsNullOrWhiteSpace(modelBox.Text) ? "gpt-5.5" : modelBox.Text.Trim();
+        string model = string.IsNullOrWhiteSpace(modelBox.Text) ? "gpt-6-luna" : modelBox.Text.Trim();
         var payload = new
         {
             model,
@@ -399,8 +399,9 @@ public class MainForm : Form
         try
         {
             AddLog("Antrean dimulai: " + selected.Count + " postingan.");
-            foreach (var post in selected)
+            for (int index = 0; index < selected.Count; index++)
             {
+                var post = selected[index];
                 queueCts.Token.ThrowIfCancellationRequested();
                 while (queuePaused)
                 {
@@ -418,7 +419,7 @@ public class MainForm : Form
                     AddLog("GAGAL: " + Short(ex.Message, 100));
                     infoStatus.Text = "Ada item gagal. Periksa log aktivitas.";
                 }
-                if (done + selected.Count(p => p.Draft.Length > 0) < selected.Count)
+                if (index < selected.Count - 1)
                     await Task.Delay(TimeSpan.FromSeconds(seconds), queueCts.Token);
             }
             AddLog("Antrean selesai. Draf dibuat: " + done + " dari " + selected.Count + ".");
