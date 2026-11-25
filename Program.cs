@@ -70,11 +70,14 @@ public class MainForm : Form
         go.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         nav.Controls.Add(go);
 
+        // Configure the split only after WinForms has performed the initial layout.
+        // Setting panel minimum sizes in the constructor can throw because the
+        // SplitContainer initially has a very small width.
         var split = new SplitContainer {
             Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 5,
-            BackColor = Color.FromArgb(8, 11, 11), Panel1MinSize = 480, Panel2MinSize = 330
+            BackColor = Color.FromArgb(8, 11, 11)
         };
-        split.SplitterDistance = 900;
+        bool splitConfigured = false;
 
         web.Dock = DockStyle.Fill;
         split.Panel1.Controls.Add(web);
@@ -93,10 +96,24 @@ public class MainForm : Form
         Controls.Add(nav);
         Controls.Add(header);
 
-        Shown += async (_, _) => await StartBrowser();
-        Resize += (_, _) => {
-            if (split.Width > 0 && split.SplitterDistance > split.Width - split.Panel2MinSize)
-                split.SplitterDistance = Math.Max(split.Panel1MinSize, split.Width - split.Panel2MinSize);
+        Shown += async (_, _) =>
+        {
+            int availableWidth = split.ClientSize.Width - split.SplitterWidth;
+            if (availableWidth >= 480 + 330)
+            {
+                split.Panel1MinSize = 480;
+                split.Panel2MinSize = 330;
+                split.SplitterDistance = Math.Min(900, availableWidth - split.Panel2MinSize);
+                splitConfigured = true;
+            }
+            await StartBrowser();
+        };
+        Resize += (_, _) =>
+        {
+            if (!splitConfigured) return;
+            int maxDistance = split.ClientSize.Width - split.SplitterWidth - split.Panel2MinSize;
+            if (maxDistance >= split.Panel1MinSize && split.SplitterDistance > maxDistance)
+                split.SplitterDistance = maxDistance;
         };
     }
 
