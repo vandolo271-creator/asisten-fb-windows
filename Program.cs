@@ -150,10 +150,11 @@ public class MainForm : Form
         host.BackColor = Color.FromArgb(12, 17, 17);
         var title = new Label { Text = "DAFTAR BACAAN & KOMENTAR AI", Dock = DockStyle.Top, Height = 40, ForeColor = Color.FromArgb(217, 255, 0), Font = new Font("Segoe UI", 12, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter };
 
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 225, BackColor = Color.FromArgb(18, 27, 27) };
-        var keyLabel = new Label { Text = "OpenAI API Key:", ForeColor = Color.Gainsboro, Location = new Point(10, 12), AutoSize = true };
-        toolbar.Controls.Add(keyLabel);
-        apiKeyBox.SetBounds(10, 32, Math.Max(180, host.ClientSize.Width - 20), 32);
+        // API key ditempatkan pada panel terpisah agar tidak tertutup kontrol lain.
+        var apiPanel = new Panel { Dock = DockStyle.Top, Height = 112, BackColor = Color.FromArgb(18, 27, 27) };
+        var keyLabel = new Label { Text = "OPENAI API KEY (TEMPEL DI KOTAK PUTIH):", ForeColor = Color.FromArgb(217, 255, 0), Location = new Point(10, 7), AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold) };
+        apiPanel.Controls.Add(keyLabel);
+        apiKeyBox.SetBounds(10, 29, Math.Max(180, host.ClientSize.Width - 20), 32);
         apiKeyBox.UseSystemPasswordChar = true;
         apiKeyBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         apiKeyBox.PlaceholderText = "Tempel API Key baru di sini";
@@ -161,35 +162,36 @@ public class MainForm : Form
         apiKeyBox.ForeColor = Color.Black;
         apiKeyBox.BorderStyle = BorderStyle.FixedSingle;
         apiKeyBox.Font = new Font("Segoe UI", 10);
-        toolbar.Controls.Add(apiKeyBox);
-        toolbar.Resize += (_, _) => apiKeyBox.Width = Math.Max(180, toolbar.ClientSize.Width - 20);
+        apiPanel.Controls.Add(apiKeyBox);
+        apiPanel.Resize += (_, _) => apiKeyBox.Width = Math.Max(180, apiPanel.ClientSize.Width - 20);
 
         saveKeyButton.Text = "SIMPAN KEY";
-        saveKeyButton.SetBounds(10, 70, 115, 32);
+        saveKeyButton.SetBounds(10, 69, 115, 32);
         saveKeyButton.BackColor = Color.FromArgb(217, 255, 0);
         saveKeyButton.ForeColor = Color.Black;
         saveKeyButton.FlatStyle = FlatStyle.Flat;
         saveKeyButton.FlatAppearance.BorderSize = 0;
         saveKeyButton.Click += (_, _) => SaveApiKey();
-        toolbar.Controls.Add(saveKeyButton);
+        apiPanel.Controls.Add(saveKeyButton);
 
-        var modelLabel = new Label { Text = "Model:", ForeColor = Color.Gainsboro, Location = new Point(138, 78), AutoSize = true };
-        toolbar.Controls.Add(modelLabel);
-        modelBox.SetBounds(188, 72, 180, 29);
+        var modelLabel = new Label { Text = "Model:", ForeColor = Color.Gainsboro, Location = new Point(138, 77), AutoSize = true };
+        apiPanel.Controls.Add(modelLabel);
+        modelBox.SetBounds(188, 71, 180, 29);
         modelBox.Text = "gpt-6-luna";
-        modelBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        toolbar.Controls.Add(modelBox);
+        modelBox.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        apiPanel.Controls.Add(modelBox);
 
-        var keyHint = new Label { Text = "Masukkan sekali lalu klik SIMPAN KEY. Kunci disimpan terenkripsi di komputer ini.", ForeColor = Color.Silver, Location = new Point(12, 108), Size = new Size(620, 20), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-        toolbar.Controls.Add(keyHint);
+        var keyHint = new Label { Text = "Kunci disimpan terenkripsi di komputer ini (Windows DPAPI), bukan di GitHub.", ForeColor = Color.Silver, Location = new Point(380, 77), Size = new Size(620, 22), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+        apiPanel.Controls.Add(keyHint);
 
-        countStatus.SetBounds(12, 122, 350, 20);
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 122, BackColor = Color.FromArgb(18, 27, 27) };
+        countStatus.SetBounds(12, 8, 350, 20);
         countStatus.ForeColor = Color.Gainsboro;
         countStatus.Font = new Font("Segoe UI", 8.5f);
         toolbar.Controls.Add(countStatus);
 
         captureButton.Text = "＋ TAMBAHKAN TEKS TERPILIH DARI FACEBOOK";
-        captureButton.SetBounds(10, 144, 350, 32);
+        captureButton.SetBounds(10, 32, 350, 32);
         captureButton.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         captureButton.BackColor = Color.FromArgb(217, 255, 0);
         captureButton.ForeColor = Color.Black;
@@ -199,16 +201,16 @@ public class MainForm : Form
         captureButton.Click += async (_, _) => await CaptureSelection();
         toolbar.Controls.Add(captureButton);
 
-        var delayLabel = new Label { Text = "Jeda:", ForeColor = Color.Gainsboro, Location = new Point(12, 190), AutoSize = true };
+        var delayLabel = new Label { Text = "Jeda:", ForeColor = Color.Gainsboro, Location = new Point(12, 82), AutoSize = true };
         toolbar.Controls.Add(delayLabel);
-        delayBox.SetBounds(55, 186, 75, 27);
+        delayBox.SetBounds(55, 78, 75, 27);
         delayBox.DropDownStyle = ComboBoxStyle.DropDownList;
         delayBox.Items.AddRange(new object[] { "2 detik", "5 detik", "8 detik", "10 detik" });
         delayBox.SelectedIndex = 1;
         toolbar.Controls.Add(delayBox);
 
         runSelectedButton.Text = "JALANKAN SEMUA DRAF";
-        runSelectedButton.SetBounds(140, 184, 185, 31);
+        runSelectedButton.SetBounds(140, 76, 185, 31);
         runSelectedButton.BackColor = Color.FromArgb(35, 155, 75);
         runSelectedButton.ForeColor = Color.White;
         runSelectedButton.FlatStyle = FlatStyle.Flat;
@@ -217,7 +219,7 @@ public class MainForm : Form
         toolbar.Controls.Add(runSelectedButton);
 
         pauseButton.Text = "PAUSE";
-        pauseButton.SetBounds(333, 184, 75, 31);
+        pauseButton.SetBounds(333, 76, 75, 31);
         pauseButton.BackColor = Color.FromArgb(180, 130, 20);
         pauseButton.ForeColor = Color.White;
         pauseButton.FlatStyle = FlatStyle.Flat;
@@ -227,7 +229,7 @@ public class MainForm : Form
         toolbar.Controls.Add(pauseButton);
 
         stopButton.Text = "STOP";
-        stopButton.SetBounds(415, 184, 70, 31);
+        stopButton.SetBounds(415, 76, 70, 31);
         stopButton.BackColor = Color.FromArgb(150, 40, 40);
         stopButton.ForeColor = Color.White;
         stopButton.FlatStyle = FlatStyle.Flat;
