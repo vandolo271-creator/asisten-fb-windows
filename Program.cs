@@ -150,18 +150,18 @@ public class MainForm : Form
         host.BackColor = Color.FromArgb(12, 17, 17);
         var title = new Label { Text = "DAFTAR BACAAN & KOMENTAR AI", Dock = DockStyle.Top, Height = 40, ForeColor = Color.FromArgb(217, 255, 0), Font = new Font("Segoe UI", 12, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter };
 
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 190, BackColor = Color.FromArgb(18, 27, 27) };
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 225, BackColor = Color.FromArgb(18, 27, 27) };
         var keyLabel = new Label { Text = "OpenAI API Key:", ForeColor = Color.Gainsboro, Location = new Point(10, 12), AutoSize = true };
         toolbar.Controls.Add(keyLabel);
-        apiKeyBox.SetBounds(112, 8, 250, 27);
+        apiKeyBox.SetBounds(10, 32, Math.Max(180, host.ClientSize.Width - 20), 27);
         apiKeyBox.UseSystemPasswordChar = true;
         apiKeyBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        apiKeyBox.Width = 250;
         apiKeyBox.PlaceholderText = "Tempel API Key di sini";
         toolbar.Controls.Add(apiKeyBox);
+        toolbar.Resize += (_, _) => apiKeyBox.Width = Math.Max(180, toolbar.ClientSize.Width - 20);
 
         saveKeyButton.Text = "SIMPAN KEY";
-        saveKeyButton.SetBounds(370, 7, 105, 29);
+        saveKeyButton.SetBounds(10, 67, 105, 29);
         saveKeyButton.BackColor = Color.FromArgb(217, 255, 0);
         saveKeyButton.ForeColor = Color.Black;
         saveKeyButton.FlatStyle = FlatStyle.Flat;
@@ -169,23 +169,23 @@ public class MainForm : Form
         saveKeyButton.Click += (_, _) => SaveApiKey();
         toolbar.Controls.Add(saveKeyButton);
 
-        var modelLabel = new Label { Text = "Model:", ForeColor = Color.Gainsboro, Location = new Point(485, 12), AutoSize = true };
+        var modelLabel = new Label { Text = "Model:", ForeColor = Color.Gainsboro, Location = new Point(128, 74), AutoSize = true };
         toolbar.Controls.Add(modelLabel);
-        modelBox.SetBounds(535, 8, 100, 27);
+        modelBox.SetBounds(178, 68, 180, 27);
         modelBox.Text = "gpt-6-luna";
-        modelBox.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        modelBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         toolbar.Controls.Add(modelBox);
 
-        var keyHint = new Label { Text = "Key disimpan terenkripsi di komputer ini (Windows DPAPI), bukan di GitHub.", ForeColor = Color.Silver, Location = new Point(12, 40), Size = new Size(620, 20), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+        var keyHint = new Label { Text = "Key disimpan terenkripsi di komputer ini (Windows DPAPI), bukan di GitHub.", ForeColor = Color.Silver, Location = new Point(12, 101), Size = new Size(620, 20), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
         toolbar.Controls.Add(keyHint);
 
-        countStatus.SetBounds(12, 65, 350, 20);
+        countStatus.SetBounds(12, 122, 350, 20);
         countStatus.ForeColor = Color.Gainsboro;
         countStatus.Font = new Font("Segoe UI", 8.5f);
         toolbar.Controls.Add(countStatus);
 
         captureButton.Text = "＋ TAMBAHKAN TEKS TERPILIH DARI FACEBOOK";
-        captureButton.SetBounds(10, 89, 350, 32);
+        captureButton.SetBounds(10, 144, 350, 32);
         captureButton.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         captureButton.BackColor = Color.FromArgb(217, 255, 0);
         captureButton.ForeColor = Color.Black;
@@ -195,16 +195,16 @@ public class MainForm : Form
         captureButton.Click += async (_, _) => await CaptureSelection();
         toolbar.Controls.Add(captureButton);
 
-        var delayLabel = new Label { Text = "Jeda:", ForeColor = Color.Gainsboro, Location = new Point(12, 134), AutoSize = true };
+        var delayLabel = new Label { Text = "Jeda:", ForeColor = Color.Gainsboro, Location = new Point(12, 190), AutoSize = true };
         toolbar.Controls.Add(delayLabel);
-        delayBox.SetBounds(55, 130, 75, 27);
+        delayBox.SetBounds(55, 186, 75, 27);
         delayBox.DropDownStyle = ComboBoxStyle.DropDownList;
         delayBox.Items.AddRange(new object[] { "2 detik", "5 detik", "8 detik", "10 detik" });
         delayBox.SelectedIndex = 1;
         toolbar.Controls.Add(delayBox);
 
         runSelectedButton.Text = "JALANKAN SEMUA DRAF";
-        runSelectedButton.SetBounds(140, 128, 185, 31);
+        runSelectedButton.SetBounds(140, 184, 185, 31);
         runSelectedButton.BackColor = Color.FromArgb(35, 155, 75);
         runSelectedButton.ForeColor = Color.White;
         runSelectedButton.FlatStyle = FlatStyle.Flat;
@@ -213,7 +213,7 @@ public class MainForm : Form
         toolbar.Controls.Add(runSelectedButton);
 
         pauseButton.Text = "PAUSE";
-        pauseButton.SetBounds(333, 128, 75, 31);
+        pauseButton.SetBounds(333, 184, 75, 31);
         pauseButton.BackColor = Color.FromArgb(180, 130, 20);
         pauseButton.ForeColor = Color.White;
         pauseButton.FlatStyle = FlatStyle.Flat;
@@ -223,7 +223,7 @@ public class MainForm : Form
         toolbar.Controls.Add(pauseButton);
 
         stopButton.Text = "STOP";
-        stopButton.SetBounds(415, 128, 70, 31);
+        stopButton.SetBounds(415, 184, 70, 31);
         stopButton.BackColor = Color.FromArgb(150, 40, 40);
         stopButton.ForeColor = Color.White;
         stopButton.FlatStyle = FlatStyle.Flat;
