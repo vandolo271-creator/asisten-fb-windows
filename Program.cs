@@ -153,15 +153,19 @@ public class MainForm : Form
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 225, BackColor = Color.FromArgb(18, 27, 27) };
         var keyLabel = new Label { Text = "OpenAI API Key:", ForeColor = Color.Gainsboro, Location = new Point(10, 12), AutoSize = true };
         toolbar.Controls.Add(keyLabel);
-        apiKeyBox.SetBounds(10, 32, Math.Max(180, host.ClientSize.Width - 20), 27);
+        apiKeyBox.SetBounds(10, 32, Math.Max(180, host.ClientSize.Width - 20), 32);
         apiKeyBox.UseSystemPasswordChar = true;
         apiKeyBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        apiKeyBox.PlaceholderText = "Tempel API Key di sini";
+        apiKeyBox.PlaceholderText = "Tempel API Key baru di sini";
+        apiKeyBox.BackColor = Color.White;
+        apiKeyBox.ForeColor = Color.Black;
+        apiKeyBox.BorderStyle = BorderStyle.FixedSingle;
+        apiKeyBox.Font = new Font("Segoe UI", 10);
         toolbar.Controls.Add(apiKeyBox);
         toolbar.Resize += (_, _) => apiKeyBox.Width = Math.Max(180, toolbar.ClientSize.Width - 20);
 
         saveKeyButton.Text = "SIMPAN KEY";
-        saveKeyButton.SetBounds(10, 67, 105, 29);
+        saveKeyButton.SetBounds(10, 70, 115, 32);
         saveKeyButton.BackColor = Color.FromArgb(217, 255, 0);
         saveKeyButton.ForeColor = Color.Black;
         saveKeyButton.FlatStyle = FlatStyle.Flat;
@@ -169,14 +173,14 @@ public class MainForm : Form
         saveKeyButton.Click += (_, _) => SaveApiKey();
         toolbar.Controls.Add(saveKeyButton);
 
-        var modelLabel = new Label { Text = "Model:", ForeColor = Color.Gainsboro, Location = new Point(128, 74), AutoSize = true };
+        var modelLabel = new Label { Text = "Model:", ForeColor = Color.Gainsboro, Location = new Point(138, 78), AutoSize = true };
         toolbar.Controls.Add(modelLabel);
-        modelBox.SetBounds(178, 68, 180, 27);
+        modelBox.SetBounds(188, 72, 180, 29);
         modelBox.Text = "gpt-6-luna";
         modelBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         toolbar.Controls.Add(modelBox);
 
-        var keyHint = new Label { Text = "Key disimpan terenkripsi di komputer ini (Windows DPAPI), bukan di GitHub.", ForeColor = Color.Silver, Location = new Point(12, 101), Size = new Size(620, 20), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+        var keyHint = new Label { Text = "Masukkan sekali lalu klik SIMPAN KEY. Kunci disimpan terenkripsi di komputer ini.", ForeColor = Color.Silver, Location = new Point(12, 108), Size = new Size(620, 20), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
         toolbar.Controls.Add(keyHint);
 
         countStatus.SetBounds(12, 122, 350, 20);
@@ -318,7 +322,19 @@ public class MainForm : Form
 
     private void LoadApiKey()
     {
-        if (File.Exists(keyFile)) infoStatus.Text = "API Key terenkripsi sudah tersimpan. Kolom tetap kosong demi keamanan.";
+        if (File.Exists(keyFile))
+        {
+            string? saved = ReadApiKey();
+            if (!string.IsNullOrWhiteSpace(saved))
+            {
+                infoStatus.Text = "API KEY TERSIMPAN ✓ — siap digunakan otomatis.";
+                AddLog("API Key terenkripsi ditemukan. Tidak perlu memasukkan ulang.");
+            }
+        }
+        else
+        {
+            infoStatus.Text = "API Key belum tersimpan. Tempel kunci baru pada kotak putih di atas.";
+        }
     }
 
     private async Task<string> GenerateCommentAsync(string postText, CancellationToken token)
